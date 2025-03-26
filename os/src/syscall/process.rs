@@ -1,5 +1,7 @@
 //! Process management syscalls
-use crate::task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next};
+use crate::task::{change_program_brk, current_user_token, exit_current_and_run_next, get_count_syscall, suspend_current_and_run_next, TASK_MANAGER};
+use crate::mm::{copy_from_kernel, copy_from_user};
+use crate::timer::get_time_us;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -25,21 +27,66 @@ pub fn sys_yield() -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let us = get_time_us();
+    let now = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    match copy_from_kernel(
+        current_user_token(), 
+        ts as usize, 
+        &now as *const TimeVal as *const u8, 
+        core::mem::size_of_val(&now)
+    ) {
+        Ok(_) => 0,
+        Err(_) => -1,
+    }
 }
 
 /// TODO: Finish sys_trace to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
-pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
+pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     trace!("kernel: sys_trace");
-    -1
+    match trace_request {
+        0 => {
+            let mut v: u8 = 0;
+            match copy_from_user(
+                current_user_token(), 
+                &mut v as *mut u8,
+                id,
+                1
+            ) {
+                Ok(_) => return v as isize,
+                Err(_) => return -1,
+            }
+        },
+
+        1 => {
+            let v = data as u8;
+            match copy_from_kernel(
+                current_user_token(), 
+                id, 
+                &v as *const u8, 
+                1
+            ) {
+                Ok(_) => return 0,
+                Err(_) => return -1,
+            }
+        },
+
+        2 => {
+            return get_count_syscall(id) as isize;
+        }
+
+        _ => return -1,
+    }
 }
 
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    trace!("kernel: sys_mmap");
     -1
 }
 

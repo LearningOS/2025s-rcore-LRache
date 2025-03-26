@@ -14,7 +14,10 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use core::usize;
+
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::MapPermission;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -153,6 +156,25 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// get the count of syscall for trace
+    pub fn get_syscall_count(&self, id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].syscall_counter[id]
+    }
+
+    /// add the count of syscall
+    pub fn add_syscall_count(&self, id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_counter[id] += 1;
+    }
+
+    pub fn mmap(&self, start: usize, len: usize, permission: MapPermission) {
+        let inner = self.inner.exclusive_access();
+        let &current_task = &inner.tasks[inner.current_task];
+        current_task.memory_set.insert_framed_area(Viastart, start + len, permission);
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +223,18 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// get the count of syscall for trace
+pub fn get_count_syscall(id: usize) -> usize {
+    TASK_MANAGER.get_syscall_count(id)
+}
+
+/// add the count of syscall
+pub fn add_count_syscall(id: usize) {
+    TASK_MANAGER.add_syscall_count(id);
+}
+
+pub fn program_mmap(start: usize, pagecount: usize) -> Result<(), ()> {
+
 }
