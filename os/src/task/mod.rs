@@ -17,7 +17,7 @@ mod task;
 use core::usize;
 
 use crate::loader::{get_app_data, get_num_app};
-use crate::mm::MapPermission;
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -170,10 +170,38 @@ impl TaskManager {
         inner.tasks[current].syscall_counter[id] += 1;
     }
 
-    pub fn mmap(&self, start: usize, len: usize, permission: MapPermission) {
-        let inner = self.inner.exclusive_access();
-        let &current_task = &inner.tasks[inner.current_task];
-        current_task.memory_set.insert_framed_area(Viastart, start + len, permission);
+    /// mmap
+    pub fn mmap_current(&self, start: usize, len: usize, permission: MapPermission) -> Result<(), ()> {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr(start + len);
+        let current_task = &mut inner.tasks[current];
+        
+        if current_task.memory_set.mmap_vaddr_conflict(start_va, end_va) {
+            return Err(());
+        }
+        
+        current_task.memory_set.insert_framed_area(start_va, end_va, permission);
+        Ok(())
+    }
+
+    /// unmap
+    pub fn unmap_current(&self, start: usize, len: usize) -> Result<(), ()> {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr(start + len);
+
+        if !start_va.aligned() {
+            return Err(());
+        }
+
+        let current_task = &mut inner.tasks[current];
+        
+        current_task.memory_set.remove_framed_area(start_va, end_va)
     }
 }
 
@@ -235,6 +263,12 @@ pub fn add_count_syscall(id: usize) {
     TASK_MANAGER.add_syscall_count(id);
 }
 
-pub fn program_mmap(start: usize, pagecount: usize) -> Result<(), ()> {
+/// mmap
+pub fn progress_mmap(start: usize, len: usize, permission: MapPermission) -> Result<(), ()> {
+    TASK_MANAGER.mmap_current(start, len, permission)
+}
 
+/// unmap
+pub fn progress_unmap(start: usize, len: usize) -> Result<(), ()> {
+    TASK_MANAGER.unmap_current(start, len)
 }

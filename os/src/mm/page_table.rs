@@ -72,6 +72,10 @@ impl PageTableEntry {
     pub fn executable(&self) -> bool {
         (self.flags() & PTEFlags::X) != PTEFlags::empty()
     }
+    /// The page pointered by page table entry is user accessible?
+    pub fn user_accessiable(&self) -> bool {
+        (self.flags() & PTEFlags::U) != PTEFlags::empty()
+    }
 }
 
 /// page table structure
@@ -194,7 +198,7 @@ pub fn copy_from_user(token: usize, dest: *mut u8, src: usize, len: usize) -> Re
         let vaddr = VirtAddr::from(start_va);
         let vpn = vaddr.floor();
         if let Some(pte) = page_table.translate(vpn) {
-            if !pte.readable() {
+            if !(pte.is_valid() && pte.readable() && pte.user_accessiable()) {
                 return Err(());
             }
             

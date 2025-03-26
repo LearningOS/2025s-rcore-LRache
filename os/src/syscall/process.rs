@@ -1,6 +1,7 @@
 //! Process management syscalls
-use crate::task::{change_program_brk, current_user_token, exit_current_and_run_next, get_count_syscall, suspend_current_and_run_next, TASK_MANAGER};
-use crate::mm::{copy_from_kernel, copy_from_user};
+use crate::config::PAGE_SIZE;
+use crate::task::{change_program_brk, current_user_token, exit_current_and_run_next, get_count_syscall, progress_mmap, progress_unmap, suspend_current_and_run_next};
+use crate::mm::{copy_from_kernel, copy_from_user, MapPermission};
 use crate::timer::get_time_us;
 
 #[repr(C)]
@@ -85,15 +86,43 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
 }
 
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!("kernel: sys_mmap");
-    -1
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
+    trace!("kernel: sys_mmap start: {:#x}, len: {:#x}, port: {:#x}", start, len, port);
+    if port & 0x7 == 0 {
+        return -1;
+    }
+    if port & !0x7 != 0 {
+        return -1;
+    }
+    if start & (PAGE_SIZE - 1) != 0 {
+        return -1;
+    }
+    
+    let mut p = MapPermission::empty();
+    p |= MapPermission::U;
+    if port & (1 << 0) != 0 {
+        p |= MapPermission::R;
+    }
+    if port & (1 << 1) != 0 {
+        p |= MapPermission::W;
+    }
+    if port & (1 << 2) != 0 {
+        p |= MapPermission::X;
+    }
+
+    match progress_mmap(start, len, p) {
+        Ok(_) => 0,
+        Err(_) => -1,
+    }
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+pub fn sys_munmap(start: usize, len: usize) -> isize {
+    trace!("kernel: sys_munmap");
+    match progress_unmap(start, len) {
+        Ok(_) => 0,
+        Err(_) => -1,
+    }
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

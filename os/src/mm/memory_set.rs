@@ -51,6 +51,17 @@ impl MemorySet {
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
+
+    /// Whether the virtual address conflicts with the existing areas.
+    pub fn mmap_vaddr_conflict(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let range = VPNRange::new(start_va.floor(), end_va.ceil());
+        for area in &self.areas {
+            if area.intersect_range(range) {
+                return true;
+            }
+        }
+        false
+    }
     /// Assume that no conflicts.
     pub fn insert_framed_area(
         &mut self,
@@ -63,6 +74,32 @@ impl MemorySet {
             None,
         );
     }
+
+    /// remove the area from start_va to end_va
+    pub fn remove_framed_area(
+        &mut self,
+        start_va: VirtAddr,
+        end_va: VirtAddr
+    ) -> Result<(), ()> {
+        let range = VPNRange::new(start_va.floor(), end_va.ceil());
+        
+        let mut found = false;
+        for i in 0..self.areas.len() {
+            if self.areas[i].equals_range(range) {
+                self.areas[i].unmap(&mut self.page_table);
+                self.areas.remove(i);
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            Err(())
+        } else {
+            Ok(())
+        }
+    }
+
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
@@ -355,6 +392,16 @@ impl MapArea {
             }
             current_vpn.step();
         }
+    }
+
+    pub fn intersect_range(&self, range: VPNRange) -> bool {
+        (self.vpn_range.get_start() <= range.get_start() && range.get_start() < self.vpn_range.get_end())
+            || (self.vpn_range.get_start() < range.get_end() && range.get_end() <= self.vpn_range.get_end())
+            || (range.get_start() <= self.vpn_range.get_start() && self.vpn_range.get_end() <= range.get_end())
+    }
+
+    pub fn equals_range(&self, range: VPNRange) -> bool {
+        range.get_start() == self.vpn_range.get_start() && range.get_end() == self.vpn_range.get_end()
     }
 }
 
