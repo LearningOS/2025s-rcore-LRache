@@ -23,7 +23,22 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        if self.ready_queue.is_empty() {
+            return None;
+        }
+        let mut min_priority = 0;
+        let mut min_index = 0;
+        for i in 0..self.ready_queue.len() {
+            let task = self.ready_queue[i].clone();
+            let priority = task.inner_exclusive_access().get_priority();
+            if priority < min_priority {
+                min_priority = priority;
+                min_index = i;
+            }
+        }
+        let t = self.ready_queue.remove(min_index).unwrap();
+        t.inner_exclusive_access().fetch();
+        Some(t)
     }
 }
 

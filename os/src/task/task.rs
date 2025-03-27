@@ -2,7 +2,7 @@
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE, MapPermission};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -68,6 +68,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// length of running
+    pub stride: usize,
+    
+    /// priority of running
+    pub pass: usize,
 }
 
 impl TaskControlBlockInner {
@@ -84,6 +90,12 @@ impl TaskControlBlockInner {
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+    pub fn get_priority(&self) -> usize {
+        self.pass + self.stride
+    }
+    pub fn fetch(&mut self) {
+        self.stride += 1;
     }
 }
 
@@ -118,6 +130,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride: 0,
+                    pass: 16,
                 })
             },
         };
@@ -191,6 +205,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    stride: 0,
+                    pass: 16,
                 })
             },
         });
@@ -236,6 +252,34 @@ impl TaskControlBlock {
             None
         }
     }
+
+    /// mmap
+    pub fn mmap(&self, start: usize, len: usize, permission: MapPermission) -> Result<(), ()> {
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr(start + len);
+        let mut inner = self.inner_exclusive_access();
+        
+        if inner.memory_set.mmap_vaddr_conflict(start_va, end_va) {
+            return Err(());
+        }
+        
+        inner.memory_set.insert_framed_area(start_va, end_va, permission);
+        
+        Ok(())
+    }
+
+    /// munmap
+    pub fn unmap(&self, start: usize, len: usize) -> Result<(), ()> {
+        let start_va = VirtAddr::from(start);
+        if !start_va.aligned() {
+            return Err(());
+        }
+        let end_va = VirtAddr(start + len);
+        let mut inner = self.inner_exclusive_access();
+        
+        inner.memory_set.remove_framed_area(start_va, end_va)
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq)]
