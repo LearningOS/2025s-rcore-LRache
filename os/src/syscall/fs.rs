@@ -1,6 +1,6 @@
 //! File and filesystem-related syscalls
-use crate::fs::{open_file, OpenFlags, Stat};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+use crate::fs::{link_file, open_file, unlink_file, count_link, OpenFlags, Stat, StatMode};
+use crate::mm::{copy_from_kernel, translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
@@ -76,28 +76,60 @@ pub fn sys_close(fd: usize) -> isize {
 }
 
 /// YOUR JOB: Implement fstat.
-pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_fstat NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_fstat(fd: usize, st: *mut Stat) -> isize {
+    debug!("kernel:pid[{}] sys_fstat", current_task().unwrap().pid.0);
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    if let Some(file) = &inner.fd_table[fd] {
+        let file = file.clone();
+        drop(inner);
+        if let Some(inode) = file.get_inode() {
+            let mode;
+            if inode.is_dir() {
+                mode = StatMode::DIR;
+            } else {
+                mode = StatMode::FILE;
+            }
+            let stat = Stat::new(0, inode.inode_id as u64, mode, count_link(&inode) as u32);
+            match copy_from_kernel(
+                current_user_token(), 
+                st as usize,
+                &stat as *const Stat as *const u8, 
+                core::mem::size_of_val(&stat)
+            ) {
+                Ok(()) => 0,
+                Err(()) => -1,
+            }
+        } else {
+            -1
+        }
+    } else {
+        -1
+    }
 }
 
 /// YOUR JOB: Implement linkat.
-pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_linkat NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_linkat(old_name: *const u8, new_name: *const u8) -> isize {
+    debug!("kernel:pid[{}] sys_linkat", current_task().unwrap().pid.0);
+    let old_name = translated_str(current_user_token(), old_name);
+    let new_name = translated_str(current_user_token(), new_name);
+
+    if old_name == new_name {
+        return -1;
+    }
+
+    match link_file(&old_name, &new_name) {
+        Ok(()) => 0,
+        Err(()) => -1,
+    }
 }
 
 /// YOUR JOB: Implement unlinkat.
-pub fn sys_unlinkat(_name: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_unlinkat NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_unlinkat(name: *const u8) -> isize {
+    debug!("kernel:pid[{}] sys_unlinkat", current_task().unwrap().pid.0);
+    let name = translated_str(current_user_token(), name);
+    match unlink_file(&name) {
+        Ok(()) => 0,
+        Err(()) => -1
+    }
 }

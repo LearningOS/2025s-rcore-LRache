@@ -125,6 +125,22 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+/// Link two files
+pub fn link_file(old_name: &str, new_name: &str) -> Result<(), ()> {
+    let old_inode_id = ROOT_INODE.find_inode_id_current(old_name).unwrap();
+    ROOT_INODE.link(old_inode_id, new_name)
+}
+
+/// Unlink file
+pub fn unlink_file(name: &str) -> Result<(), ()> {
+    ROOT_INODE.unlink(name)
+}
+
+/// Count link
+pub fn count_link(inode: &Inode) -> usize {
+    ROOT_INODE.count_link(inode)
+}
+ 
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable
@@ -155,5 +171,8 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn get_inode(&self) -> Option<Arc<Inode>> {
+        Some(self.inner.exclusive_access().inode.clone())
     }
 }

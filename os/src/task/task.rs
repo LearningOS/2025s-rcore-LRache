@@ -3,7 +3,7 @@ use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE, MapPermission};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -260,6 +260,33 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// mmap
+    pub fn mmap(&self, start: usize, len: usize, permission: MapPermission) -> Result<(), ()> {
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr(start + len);
+        let mut inner = self.inner_exclusive_access();
+        
+        if inner.memory_set.mmap_vaddr_conflict(start_va, end_va) {
+            return Err(());
+        }
+        
+        inner.memory_set.insert_framed_area(start_va, end_va, permission);
+        
+        Ok(())
+    }
+
+    /// munmap
+    pub fn unmap(&self, start: usize, len: usize) -> Result<(), ()> {
+        let start_va = VirtAddr::from(start);
+        if !start_va.aligned() {
+            return Err(());
+        }
+        let end_va = VirtAddr(start + len);
+        let mut inner = self.inner_exclusive_access();
+        
+        inner.memory_set.remove_framed_area(start_va, end_va)
     }
 }
 
