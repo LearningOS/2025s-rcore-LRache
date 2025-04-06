@@ -76,5 +76,6 @@ pub fn rust_main() -> ! {
     fs::list_apps();
     task::add_initproc();
     task::run_tasks();
+    
     panic!("Unreachable in rust_main!");
 }
