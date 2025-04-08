@@ -2,7 +2,7 @@
 
 use super::UPSafeCell;
 use crate::task::TaskControlBlock;
-use crate::task::{block_current_and_run_next, suspend_current_and_run_next};
+use crate::task::{block_current_and_run_next, suspend_current_and_run_next, current_process};
 use crate::task::{current_task, wakeup_task};
 use alloc::{collections::VecDeque, sync::Arc};
 
@@ -16,14 +16,17 @@ pub trait Mutex: Sync + Send {
 
 /// Spinlock Mutex struct
 pub struct MutexSpin {
+    /// Mutex id
+    pub id: usize,
     locked: UPSafeCell<bool>,
 }
 
 impl MutexSpin {
     /// Create a new spinlock mutex
-    pub fn new() -> Self {
+    pub fn new(id: usize) -> Self {
         Self {
             locked: unsafe { UPSafeCell::new(false) },
+            id,
         }
     }
 }
@@ -39,6 +42,10 @@ impl Mutex for MutexSpin {
                 suspend_current_and_run_next();
                 continue;
             } else {
+                let process = current_process();
+                let mut process_inner = process.inner_exclusive_access();
+                process_inner.mutex_work[self.id] -= 1;
+                
                 *locked = true;
                 return;
             }
@@ -60,17 +67,20 @@ pub struct MutexBlocking {
 pub struct MutexBlockingInner {
     locked: bool,
     wait_queue: VecDeque<Arc<TaskControlBlock>>,
+    /// Mutex id
+    pub id: usize,
 }
 
 impl MutexBlocking {
     /// Create a new blocking mutex
-    pub fn new() -> Self {
+    pub fn new(id: usize) -> Self {
         trace!("kernel: MutexBlocking::new");
         Self {
             inner: unsafe {
                 UPSafeCell::new(MutexBlockingInner {
                     locked: false,
                     wait_queue: VecDeque::new(),
+                    id,
                 })
             },
         }
@@ -87,6 +97,9 @@ impl Mutex for MutexBlocking {
             drop(mutex_inner);
             block_current_and_run_next();
         } else {
+            let process = current_process();
+            let mut process_inner = process.inner_exclusive_access();
+            process_inner.mutex_work[mutex_inner.id] -= 1;
             mutex_inner.locked = true;
         }
     }

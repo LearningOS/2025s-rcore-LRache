@@ -13,17 +13,19 @@ pub struct Semaphore {
 pub struct SemaphoreInner {
     pub count: isize,
     pub wait_queue: VecDeque<Arc<TaskControlBlock>>,
+    pub id: usize,
 }
 
 impl Semaphore {
     /// Create a new semaphore
-    pub fn new(res_count: usize) -> Self {
+    pub fn new(res_count: usize, id: usize) -> Self {
         trace!("kernel: Semaphore::new");
         Self {
             inner: unsafe {
                 UPSafeCell::new(SemaphoreInner {
                     count: res_count as isize,
                     wait_queue: VecDeque::new(),
+                    id
                 })
             },
         }

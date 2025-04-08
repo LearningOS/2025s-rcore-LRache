@@ -71,7 +71,7 @@ disasm-vim: kernel
 run: build run-inner
 
 run-inner:
-	@qemu-system-riscv64 \
+	@qemu-system-riscv64-7.0.0 \
 		-M 128m \
 		-machine virt \
 		-nographic \
