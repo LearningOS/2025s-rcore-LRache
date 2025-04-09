@@ -56,9 +56,9 @@ pub struct ProcessControlBlockInner {
     pub mutex_need: Vec<Vec<i32>>,
     pub mutex_work: Vec<i32>,
     /// semaphore deadlock detection
-    pub semaphore_finish: Vec<bool>,
+    pub semaphore_available: Vec<i32>,
     pub semaphore_need: Vec<Vec<i32>>,
-    pub semaphore_work: Vec<i32>,
+    pub semaphore_allocation: Vec<Vec<i32>>
 }
 
 impl ProcessControlBlockInner {
@@ -133,9 +133,9 @@ impl ProcessControlBlock {
                     mutex_finish: vec![false],
                     mutex_need: vec![vec![]],
                     mutex_work: vec![],
-                    semaphore_finish: vec![false],
+                    semaphore_available: vec![],
                     semaphore_need: vec![vec![]],
-                    semaphore_work: vec![],
+                    semaphore_allocation: vec![vec![]]
                 })
             },
         });
@@ -266,9 +266,9 @@ impl ProcessControlBlock {
                     mutex_finish: vec![false],
                     mutex_need: vec![vec![]],
                     mutex_work: vec![],
-                    semaphore_finish: vec![false],
+                    semaphore_available: vec![],
                     semaphore_need: vec![vec![]],
-                    semaphore_work: vec![],
+                    semaphore_allocation: vec![vec![]]
                 })
             },
         });

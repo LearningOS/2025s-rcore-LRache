@@ -42,9 +42,9 @@ impl Mutex for MutexSpin {
                 suspend_current_and_run_next();
                 continue;
             } else {
-                let process = current_process();
-                let mut process_inner = process.inner_exclusive_access();
-                process_inner.mutex_work[self.id] -= 1;
+                // let process = current_process();
+                // let mut process_inner = process.inner_exclusive_access();
+                // process_inner.mutex_work[self.id] -= 1;
                 
                 *locked = true;
                 return;
